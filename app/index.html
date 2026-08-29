@@ -1848,6 +1848,32 @@
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
     }
 
+    .cust-group { margin-bottom: 20px; }
+    .cust-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: var(--accent-soft);
+        border: 2px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--foreground);
+        margin-bottom: 12px;
+    }
+    .cust-head .ti { color: var(--accent); }
+    .cust-count {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        background: var(--surface);
+        border: 1.5px solid var(--gray-300);
+        border-radius: var(--radius-full);
+        padding: 2px 10px;
+    }
+
     .sig-chip {
         display: inline-block;
         padding: 2px 10px;
@@ -3552,7 +3578,18 @@
         }
 
         const shownH = history.slice(0, historyShown);
-        container.innerHTML = shownH.map(item => {
+        // จัดกลุ่มตามลูกค้า (รักษาลำดับใหม่สุดก่อน)
+        const groups = [];
+        const byName = {};
+        shownH.forEach(function (item) {
+            const key = item.customerName || 'ไม่ระบุลูกค้า';
+            if (!byName[key]) { byName[key] = { name: key, items: [] }; groups.push(byName[key]); }
+            byName[key].items.push(item);
+        });
+        container.innerHTML = groups.map(function (g) {
+            return '<div class="cust-group"><div class="cust-head"><i class="ti ti-user"></i> ' + escapeHtml(g.name) +
+                ' <span class="cust-count">' + g.items.length + ' เอกสาร</span></div>' +
+                g.items.map(item => {
             const isQuotation = item.type === 'quotation';
             const typeClass = isQuotation ? 'quotation' : 'bill';
             const typeText = item.currentType || (isQuotation ? 'ใบเสนอราคา' : 'บิลเงินสด');
@@ -3608,6 +3645,7 @@
         </div>
       </div>
     `;
+            }).join('') + '</div>';
         }).join('') +
             (history.length > shownH.length
                 ? '<div class="text-center" style="padding:8px 0 16px;"><button type="button" class="btn btn-outline" onclick="loadMoreHistory()"><i class="ti ti-reload"></i> โหลดเพิ่ม (เหลือ ' + (history.length - shownH.length) + ' รายการ)</button></div>'
@@ -4270,7 +4308,7 @@
     // แล้ว user กดปุ่มแชร์ของ iOS ในแท็บนั้น — native ทุกปลายทาง
     function openPdfInNewTab(viewUrl) {
         const id = extractFileId(viewUrl);
-        const url = id ? 'https://drive.google.com/uc?export=download&id=' + id : viewUrl;
+        const url = id ? 'https://drive.google.com/file/d/' + id + '/view' : viewUrl;
         const a = document.createElement('a');
         a.href = url;
         a.target = '_blank';
