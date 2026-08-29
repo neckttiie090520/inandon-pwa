@@ -77,7 +77,7 @@
     <!-- Debug overlay — วัดค่าจริงบนเครื่องผู้ใช้ (ลบออกเมื่อแก้ fullscreen เสร็จ) -->
     <div id="dbg" style="position:fixed;bottom:2px;left:6px;z-index:99999;font:10px/1.4 ui-monospace,Menlo,monospace;color:#0F766E;background:rgba(255,253,245,.9);border:1px solid #0F766E;border-radius:6px;padding:2px 6px;pointer-events:none;">shell: boot…</div>
     <script>
-        var BUILD_ID = 'v10-20260829';
+        var BUILD_ID = 'v11-20260829';
         function hideBoot() {
             var boot = document.getElementById('boot');
             if (!boot || boot.dataset.hidden) return;
@@ -119,17 +119,38 @@
             document.documentElement.style.setProperty('--banner-h', bannerH + 'px');
         }
         // ความสูงจริง = ค่าที่ browser ยืด iframe ตาม top/bottom anchor — ไม่อ่าน innerHeight/dvh
+        function cssH(v) {
+            var el = document.createElement('div');
+            el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:' + v + ';visibility:hidden;';
+            document.body.appendChild(el);
+            var h = Math.round(el.getBoundingClientRect().height);
+            el.remove();
+            return h;
+        }
         function postSize() {
             syncVars();
             var h = appFrame.getBoundingClientRect().height;
             postToApp({ type: 'inandon-safe', bottom: 0, height: h });
-            // debug overlay — ค่าจริงบนเครื่องผู้ใช้
+            // debug overlay — ค่าจริงบนเครื่องผู้ใช้ (ตาม WebKit bug 301994 signature)
             try {
-                document.getElementById('dbg').textContent = 'shell ' + BUILD_ID +
-                    ' | h:' + Math.round(h) + ' b:' + bannerH +
-                    ' iH:' + window.innerHeight +
+                var pr = document.createElement('div');
+                pr.style.cssText = 'position:fixed;left:-9999px;top:0;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);';
+                document.body.appendChild(pr);
+                var pcs = getComputedStyle(pr);
+                var st = Math.round(parseFloat(pcs.paddingTop) || 0), sb = Math.round(parseFloat(pcs.paddingBottom) || 0);
+                pr.remove();
+                var ch = document.documentElement.clientHeight;
+                var scr = (window.screen && screen.height) || 0;
+                var vv = (window.visualViewport && Math.round(window.visualViewport.height)) || 0;
+                document.getElementById('dbg').innerHTML =
+                    'shell ' + BUILD_ID + ' | b:' + bannerH +
+                    ' sw:' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 1 : 0) +
                     ' sa:' + (navigator.standalone ? 1 : 0) +
-                    ' sw:' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 1 : 0);
+                    '<br>scr:' + scr + ' ch:' + ch + ' gap:' + (scr - ch) +
+                    '<br>dvh:' + cssH('100dvh') + ' vh:' + cssH('100vh') +
+                    ' lvh:' + cssH('100lvh') + ' vv:' + vv +
+                    '<br>st:' + st + ' sb:' + sb + ' iH:' + window.innerHeight +
+                    ' h:' + Math.round(h);
             } catch (e) {}
         }
         // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ความสูง iframe จริง − ที่แอปเห็น
