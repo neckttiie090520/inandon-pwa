@@ -1,4 +1,4 @@
-const CACHE = 'inandon-app-v1';
+const CACHE = 'inandon-app-v2';
 self.addEventListener('install', (e) => {
     e.waitUntil(caches.open(CACHE).then((c) =>
         Promise.all(['./', './manifest.webmanifest'].map((u) =>
@@ -14,6 +14,8 @@ self.addEventListener('activate', (e) => {
     self.clients.claim();
 });
 self.addEventListener('fetch', (event) => {
+    // ข้าม cross-origin requests — SW จัดการเฉพาะ same-origin
+    if (!event.request.url.startsWith(self.location.origin)) return;
     const url = event.request.url;
     if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
         event.respondWith(fetch(event.request).catch(() => caches.match('./')));

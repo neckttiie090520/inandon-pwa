@@ -1,4 +1,4 @@
-const CACHE = 'inandon-app-v1';
+const CACHE = 'inandon-app-v2';
 self.addEventListener('install', (e) => {
     e.waitUntil(caches.open(CACHE).then((c) =>
         Promise.all(['./', './manifest.webmanifest'].map((u) =>

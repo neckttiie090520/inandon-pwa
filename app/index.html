@@ -2614,16 +2614,22 @@
         const auth = apiAuth();
         const canRetry = READ_FNS.indexOf(fn) !== -1;
         function once() {
+            const ctl = ('AbortController' in window) ? new AbortController() : null;
+            const tm = ctl ? setTimeout(function () { ctl.abort(); }, 45000) : null; // กัน connection ค้าง → กลายเป็น error แล้ว retry ได้
             return fetch(GAS_API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ fn: fn, args: args, auth: auth })
+                body: JSON.stringify({ fn: fn, args: args, auth: auth }),
+                signal: ctl ? ctl.signal : undefined
             }).then(function (r) { return r.text(); }).then(function (text) {
-                if (text.charAt(0) !== '{') throw new Error('SERVER_HTML');
-                return JSON.parse(text);
-            });
+                const t = String(text || '').replace(/^﻿/, '').trim();
+                // GAS API ตอบทั้ง object {..} และ array [..] (getCombinedHistory/getAllCustomers/searchCustomers)
+                // อย่าอนุมานว่าไม่ใช่ { = HTML — มันทำให้ list endpoints พังทั้งหมด
+                if (t.charAt(0) !== '{' && t.charAt(0) !== '[') throw new Error('SERVER_HTML');
+                return JSON.parse(t);
+            }).finally(function () { if (tm) clearTimeout(tm); });
         }
-        const RETRY_DELAYS = [3000, 8000, 15000, 25000, 40000];
+        const RETRY_DELAYS = [2000, 6000, 15000];
         function attempt(i) {
             return once().catch(function (e1) {
                 if (e1 && e1.needAuth) { try { window.__forceLock(); } catch (e) {} throw e1; }
@@ -3841,9 +3847,10 @@
         }
         const container = document.getElementById('customersList');
         container.innerHTML = `
-    <div class="text-center" style="padding: 40px;">
-      <div class="spinner"></div>
-      <p>กำลังโหลดข้อมูลลูกค้า...</p>
+    <div class="empty-state">
+      <span class="empty-icon"><i class="ti ti-alert-triangle"></i></span>
+      <p>ไม่สามารถโหลดข้อมูลลูกค้าได้</p>
+      <button class="btn btn-primary" onclick="loadCustomersData()">ลองใหม่</button>
     </div>
   `;
     }
