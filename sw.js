@@ -30,6 +30,11 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     const url = event.request.url;
+    // auto-update check ของ shell: ผ่านตรงเสมอ ห้าม cache กัก
+    if (url.includes('__upd=1')) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
     // GAS API + Google Fonts/Drive: ผ่านตรง (ข้อมูลสดเสมอ)
     if (url.includes('script.google.com') || url.includes('script.googleusercontent.com') ||
         url.includes('drive.google.com') || url.includes('fonts.googleapis.com') ||

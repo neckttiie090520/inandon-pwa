@@ -117,19 +117,22 @@
                 var ih = parseFloat(d.innerH) || 0;
                 if (ih > 0) {
                     var b = Math.max(0, assignedH - ih);
-                    // tolerance 1px — กัน subpixel ทำ geometry แกว่งไปมา
-                    if (Math.abs(b - bannerH) > 1) { bannerH = b; applyGeom(); }
+                    // tolerance 1px กัน subpixel + clamp ≤200px กันค่าที่โดนคีย์บอร์ดเบียด
+                    if (Math.abs(b - bannerH) > 1 && b <= 200) { bannerH = b; applyGeom(); }
                 }
             }
             if (d.type === 'inandon-ready') hideBoot();
         });
         function fitFrame() {
-            H = window.innerHeight;
+            // กันบั๊ก iOS ที่ innerHeight หดค้างหลังคีย์บอร์ด/share sheet ปิด
+            H = Math.max(H, window.innerHeight);
             applyGeom();
         }
         applyGeom();
         window.addEventListener('resize', fitFrame);
-        window.addEventListener('orientationchange', function () { setTimeout(fitFrame, 250); });
+        window.addEventListener('orientationchange', function () {
+            setTimeout(function () { H = window.innerHeight; applyGeom(); }, 250); // หมุนจอ: baseline ใหม่ตรง ๆ
+        });
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', fitFrame);
         }
@@ -138,6 +141,34 @@
                 navigator.serviceWorker.register('./sw.js').catch(function () {});
             });
         }
+        // ================================================================
+        // Auto-update check — ก่อนเข้าแอป (ยังอยู่หลัง boot screen)
+        // ดึง shell ล่าสุดจากเน็ต (__upd=1 ให้ SW ข้าม cache) เทียบ BUILD_ID
+        // ถ้าต่าง = อัปเดต SW + reload 1 ครั้ง (ผู้ใช้ไม่ต้องติดตั้งใหม่)
+        // ================================================================
+        var BUILD_ID = 'v4-20260829';
+        (function () {
+            if (!window.fetch) return;
+            function maybeReload(newId) {
+                try {
+                    // reload ได้รอบเดียวต่อ session — กัน loop ถ้า CDN เสิร์ฟของเก่า
+                    if (sessionStorage.getItem('inandon_upd')) return;
+                    sessionStorage.setItem('inandon_upd', newId);
+                } catch (e) { return; }
+                try {
+                    var reg = navigator.serviceWorker.getRegistration();
+                    if (reg && reg.then) reg.then(function (r) { if (r && r.update) r.update(); });
+                } catch (e) {}
+                location.reload();
+            }
+            fetch('./index.html?__upd=1&cb=' + Date.now(), { cache: 'no-store' })
+                .then(function (r) { return r.text(); })
+                .then(function (t) {
+                    var m = t.match(/BUILD_ID = '([^']+)'/);
+                    if (m && m[1] !== BUILD_ID) maybeReload(m[1]);
+                })
+                .catch(function () { /* offline — ใช้เวอร์ชันเดิมต่อได้ */ });
+        })();
     </script>
 </body>
 </html>
