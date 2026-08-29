@@ -2537,28 +2537,23 @@
             body: JSON.stringify({ fn: fn, args: args, auth: window.sessionPinHash || '' })
         }).then(function (r) { return r.json(); });
     }
-    (function () {
-        const target = {
-            withSuccessHandler: function (f) { this._ok = f; return this; },
-            withFailureHandler: function (f) { this._fail = f; return this; }
-        };
-        window.google = window.google || {};
-        window.google.script = {
-            run: new Proxy(target, {
-                get: function (t, prop) {
-                    if (prop in t) return t[prop];
-                    return function () {
-                        const args = Array.prototype.slice.call(arguments);
-                        const p = api.apply(null, [String(prop)].concat(args));
-                        return p.then(
-                            function (r) { if (t._ok) t._ok(r); },
-                            function (e) { if (t._fail) t._fail(e); else throw e; }
-                        );
-                    };
-                }
-            })
-        };
-    })();
+    function makeRunChain(ok, fail) {
+        return new Proxy({}, {
+            get: function (t, prop) {
+                if (prop === 'withSuccessHandler') return function (f) { return makeRunChain(f, fail); };
+                if (prop === 'withFailureHandler') return function (f) { return makeRunChain(ok, f); };
+                return function () {
+                    const args = Array.prototype.slice.call(arguments);
+                    return api.apply(null, [String(prop)].concat(args)).then(
+                        function (r) { if (ok) ok(r); },
+                        function (e) { if (fail) fail(e); else throw e; }
+                    );
+                };
+            }
+        });
+    }
+    window.google = window.google || {};
+    window.google.script = { run: makeRunChain(null, null) };
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
     };
