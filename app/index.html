@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1899,6 +1899,11 @@
         }
     }
     </style>
+    <style>
+        /* iOS app-like: ล็อกซูมระดับ CSS (เสริม gesturestart preventDefault) */
+        html, body { touch-action: manipulation; }
+        #pdfScroll { touch-action: pan-x pan-y; }
+    </style>
 </head>
 <body>
 
@@ -2519,7 +2524,6 @@
     </script>
 
     <script>
-
     // ================================================================
     // Own-origin adapter: google.script.run → JSON API (text/plain POST)
     // auth = sha256(PIN) — แนบอัตโนมัติทุกครั้งหลังปลดล็อก
@@ -2555,23 +2559,21 @@
             })
         };
     })();
-    // โลโก้จาก config
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
     };
-    // จำ hash ของ PIN ที่ปลดล็อก → ใช้ยืนยันกับ API
-    (function () {
-        const _tryUnlock = window.tryUnlock;
-        if (typeof _tryUnlock === 'function') {
-            window.tryUnlock = function () {
-                if (typeof sha256HexJs === 'function' && typeof pinBuffer !== 'undefined' && pinBuffer.length >= 4) {
-                    window.sessionPinHash = sha256HexJs(pinBuffer);
-                }
-                return _tryUnlock.apply(this, arguments);
-            };
-        }
-    })();
-
+    // ================================================================
+    // iOS app-like: ล็อกซูม (pinch / double-tap) กัน UI เพี้ยน
+    // ================================================================
+    document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+    document.addEventListener('gesturechange', function (e) { e.preventDefault(); });
+    document.addEventListener('dblclick', function (e) { e.preventDefault(); });
+    // SW: offline shell
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('sw.js').catch(function () {});
+        });
+    }
 
     </script>
     <script>
@@ -4174,6 +4176,7 @@
         const err = document.getElementById('lockError');
         if (sha256HexJs(pinBuffer) === passcodeHash) {
             try { sessionStorage.setItem('inandon_unlocked', '1'); } catch (e) {}
+            window.sessionPinHash = sha256HexJs(pinBuffer); // own-origin: เก็บ hash ไว้ยืนยัน API
             const screen = document.getElementById('lockScreen');
             screen.style.opacity = '0';
             setTimeout(() => { screen.style.display = 'none'; }, 250);
