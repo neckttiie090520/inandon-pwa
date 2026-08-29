@@ -58,11 +58,22 @@
     </div>
     <iframe id="app" src="https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec" allow="fullscreen" title="InAndOnBill"></iframe>
     <script>
-        document.getElementById('app').addEventListener('load', function () {
+        function hideBoot() {
             var boot = document.getElementById('boot');
+            if (!boot || boot.dataset.hidden) return;
+            boot.dataset.hidden = '1';
             boot.style.transition = 'opacity 0.3s';
             boot.style.opacity = '0';
             setTimeout(function () { boot.style.display = 'none'; }, 300);
+        }
+        // ยก boot ตอนที่แอปแจ้งว่า lock ขึ้นเรียบร้อยแล้ว (กันแอปแฟลชก่อน lock)
+        window.addEventListener('message', function (e) {
+            if (e.data && e.data.type === 'inandon-ready') hideBoot();
+        });
+        // fallback: ถ้าไม่ได้สัญญาณภายใน 12 วิ ให้เข้าแอปเดิม
+        setTimeout(hideBoot, 12000);
+        document.getElementById('app').addEventListener('load', function () {
+            setTimeout(hideBoot, 2500);
         });
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
