@@ -14,7 +14,13 @@
     <link rel="dns-prefetch" href="https://script.googleusercontent.com">
     <title>InAndOnBill</title>
     <style>
-        /* dvh = dynamic viewport ของ iOS — กัน URL bar ทำความสูงคลาด */
+        /* ================================================================
+           CSS-first geometry — ขนาดพื้นฐานมาจาก 100dvh เสมอ (เบราว์เซอร์
+           คำนวณสดทุกสถานะ: standalone/Safari/หมุนจอ ไม่มี JS state ให้ค้าง)
+           JS เติมเฉพาะ 2 ค่าที่นิ่ง: --banner-h (แถบ Google ที่วัดได้)
+           และ --safe-inset (โซน home indicator จาก env())
+           ================================================================ */
+        :root { --banner-h: 0px; --safe-inset: 0px; }
         html, body {
             margin: 0; padding: 0;
             height: 100vh; height: 100dvh;
@@ -26,8 +32,10 @@
             position: fixed;
             left: 0;
             width: 100vw; width: 100dvw;
-            /* top/height สั่งด้วย JS — คำนวณจากความสูงแถบ Google ที่วัดสด */
-            height: 100vh; height: 100dvh;
+            /* banner อยู่เหนือจอหมด, แอปลงท้ายถึงขอบล่างจริง (รวมโซน home indicator) */
+            top: calc(0px - var(--banner-h));
+            height: calc(100vh + var(--banner-h) + var(--safe-inset));
+            height: calc(100dvh + var(--banner-h) + var(--safe-inset));
             border: 0;
         }
         .boot {
@@ -76,68 +84,77 @@
         document.getElementById('app').addEventListener('load', function () {
             setTimeout(hideBoot, 2500);
         });
+
         // ================================================================
-        // Self-measuring banner crop (แก้พื้นที่ว่างท้ายจอ)
-        // หน้า GAS = ตาราง 2 แถว: แถบ "สร้างโดยผู้ใช้ Google Apps Script"
-        // (บนสุด, สูงไม่คงที่) + แอปเราแถวล่าง → wrapper วัดความสูงจริง
-        // จากการรายงานของแอป แล้วดัน iframe ขึ้นเหนือจอพอดีแถบ แอปจะได้
-        // พื้นที่ = จอเต็ม 100% พอดีเป๊ะ ไม่ว่าแถบจะสูงเท่าไหร่
+        // Geometry v6 (CSS-first) — หน้า GAS ฝังแถบ "สร้างโดยผู้ใช้ Apps
+        // Script" ไว้บนหัว (สูงไม่คงที่) วิธีเดียวที่เสถียร: วัดจากการ
+        // รายงานของแอป แล้วตั้ง --banner-h ให้ CSS crop ขึ้นเหนือจอ
+        // ห้ามอ่าน window.innerHeight มาตั้งขนาด — ค่าของ iOS เพี้ยนตอน
+        // launch/คีย์บอร์ด/หมุนจอ คือต้นตอของอาการ "เต็มจอแล้วกลับไปเหมือนเดิม"
         // ================================================================
-        var insetEl = document.createElement('div');
-        insetEl.style.cssText = 'position:fixed;bottom:0;left:0;height:0;padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
-        document.body.appendChild(insetEl);
-        function bottomInset() {
-            var h = insetEl.getBoundingClientRect().height;
-            return isNaN(h) ? 0 : h;
-        }
         var GAS_URL = 'https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec';
         // cache-bust: ใส่ cb ใหม่ทุกครั้งที่เปิด → GAS ส่ง HTML ล่าสุดเสมอ
         var appFrame = document.getElementById('app');
         appFrame.src = GAS_URL + '?cb=' + Date.now();
 
-        var H = window.innerHeight;   // จอจริง (top window ใน installed PWA)
-        var bannerH = 0;              // ความสูงแถบ Google ที่วัดได้สด
-        var assignedH = 0;            // ความสูงที่สั่ง iframe ล่าสุด
+        var bannerH = 0;      // ความสูงแถบ Google (px) ที่วัดได้
+        var rearmUntil = 0;   // ช่วงที่ยอมรับ banner ใหม่ได้อิสระ (resume/หมุนจอ)
 
+        // probe env(safe-area-inset-bottom) — env() ใน iframe = 0 เสมอ ต้องวัดที่ top window
+        var insetEl = document.createElement('div');
+        insetEl.style.cssText = 'position:fixed;bottom:0;left:0;height:0;padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
+        document.body.appendChild(insetEl);
+        function insetPx() {
+            var h = insetEl.getBoundingClientRect().height;
+            return isNaN(h) ? 0 : h;
+        }
         function postToApp(msg) {
             try { appFrame.contentWindow.postMessage(msg, '*'); } catch (e) {}
         }
-        function applyGeom() {
-            var inset = bottomInset();
-            assignedH = H + bannerH + inset;
-            appFrame.style.top = (-bannerH) + 'px';   // แถบอยู่เหนือจอหมด
-            appFrame.style.height = assignedH + 'px'; // แอปได้ H+inset — ถึงขอบล่างจริง
-            // env() ใน iframe = 0 เสมอ → ส่ง inset + ความสูงใช้งานจริงเข้าไป
-            // (innerHeight ของ standalone iOS ไม่รวมโซน home indicator → ต้องบวก inset คืน)
-            postToApp({ type: 'inandon-safe', bottom: inset, height: H + inset });
+        function syncVars() {
+            var inset = insetPx();
+            var root = document.documentElement.style;
+            root.setProperty('--safe-inset', inset + 'px');
+            root.setProperty('--banner-h', bannerH + 'px');
+            return inset;
         }
-        // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ที่สั่ง − ที่เห็น
+        // ความสูงจริงมาจาก CSS (rect ของ body = 100dvh ณ ขณะนั้น) ไม่ใช่ innerHeight
+        function postSize() {
+            var inset = syncVars();
+            var dvh = document.body.getBoundingClientRect().height;
+            postToApp({ type: 'inandon-safe', bottom: inset, height: dvh + inset });
+        }
+        // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ความสูง iframe จริง − ที่แอปเห็น
         window.addEventListener('message', function (e) {
             var d = e.data;
             if (!d) return;
-            if (d.type === 'inandon-geom' && assignedH > 0) {
+            if (d.type === 'inandon-geom') {
                 var ih = parseFloat(d.innerH) || 0;
-                if (ih > 0) {
-                    var b = Math.max(0, assignedH - ih);
-                    // tolerance 1px กัน subpixel + clamp ≤200px กันค่าที่โดนคีย์บอร์ดเบียด
-                    if (Math.abs(b - bannerH) > 1 && b <= 200) { bannerH = b; applyGeom(); }
+                var cur = appFrame.getBoundingClientRect().height;
+                if (ih > 0 && cur > 0) {
+                    var b = Math.max(0, cur - ih);
+                    // ยอมรับได้อิสระ: รอบแรก + หลัง resume/หมุนจอ (2 วิ)
+                    // ปกติแกว่งได้แค่ ±40px — กันค่าที่โดนคีย์บอร์ดเบียด (100px+)
+                    var maxB = (bannerH === 0 || Date.now() < rearmUntil) ? 300 : bannerH + 40;
+                    if (Math.abs(b - bannerH) > 1 && b <= maxB) bannerH = b;
                 }
+                postSize(); // sync กลับทุกครั้ง (ไม่มี loop — app ตั้ง var แล้วไม่เกิด resize ซ้ำ)
             }
             if (d.type === 'inandon-ready') hideBoot();
         });
-        function fitFrame() {
-            // กันบั๊ก iOS ที่ innerHeight หดค้างหลังคีย์บอร์ด/share sheet ปิด
-            H = Math.max(H, window.innerHeight);
-            applyGeom();
-        }
-        applyGeom();
-        window.addEventListener('resize', fitFrame);
-        window.addEventListener('orientationchange', function () {
-            setTimeout(function () { H = window.innerHeight; applyGeom(); }, 250); // หมุนจอ: baseline ใหม่ตรง ๆ
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) rearmUntil = Date.now() + 2000;
         });
+        window.addEventListener('orientationchange', function () {
+            setTimeout(function () { rearmUntil = Date.now() + 2000; postSize(); }, 250);
+        });
+        syncVars();
+        postSize();
+        window.addEventListener('resize', postSize);
         if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', fitFrame);
+            window.visualViewport.addEventListener('resize', postSize);
         }
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('./sw.js').catch(function () {});
@@ -148,7 +165,7 @@
         // ดึง shell ล่าสุดจากเน็ต (__upd=1 ให้ SW ข้าม cache) เทียบ BUILD_ID
         // ถ้าต่าง = อัปเดต SW + reload 1 ครั้ง (ผู้ใช้ไม่ต้องติดตั้งใหม่)
         // ================================================================
-        var BUILD_ID = 'v5-20260829';
+        var BUILD_ID = 'v6-20260829';
         (function () {
             if (!window.fetch) return;
             function maybeReload(newId) {
