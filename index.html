@@ -103,11 +103,13 @@
             try { appFrame.contentWindow.postMessage(msg, '*'); } catch (e) {}
         }
         function applyGeom() {
-            assignedH = H + bannerH;
+            var inset = bottomInset();
+            assignedH = H + bannerH + inset;
             appFrame.style.top = (-bannerH) + 'px';   // แถบอยู่เหนือจอหมด
-            appFrame.style.height = assignedH + 'px'; // แอปได้ H พอดี
-            // env() ใน iframe = 0 เสมอ → ส่ง inset + ความสูงจอจริงเข้าไป
-            postToApp({ type: 'inandon-safe', bottom: bottomInset(), height: H });
+            appFrame.style.height = assignedH + 'px'; // แอปได้ H+inset — ถึงขอบล่างจริง
+            // env() ใน iframe = 0 เสมอ → ส่ง inset + ความสูงใช้งานจริงเข้าไป
+            // (innerHeight ของ standalone iOS ไม่รวมโซน home indicator → ต้องบวก inset คืน)
+            postToApp({ type: 'inandon-safe', bottom: inset, height: H + inset });
         }
         // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ที่สั่ง − ที่เห็น
         window.addEventListener('message', function (e) {
@@ -146,7 +148,7 @@
         // ดึง shell ล่าสุดจากเน็ต (__upd=1 ให้ SW ข้าม cache) เทียบ BUILD_ID
         // ถ้าต่าง = อัปเดต SW + reload 1 ครั้ง (ผู้ใช้ไม่ต้องติดตั้งใหม่)
         // ================================================================
-        var BUILD_ID = 'v4-20260829';
+        var BUILD_ID = 'v5-20260829';
         (function () {
             if (!window.fetch) return;
             function maybeReload(newId) {
