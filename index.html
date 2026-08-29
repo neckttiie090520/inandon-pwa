@@ -75,7 +75,7 @@
     </div>
     <div id="frameWrap"><iframe id="app" allow="fullscreen; web-share" title="InAndOnBill"></iframe></div>
     <script>
-        var BUILD_ID = 'v12-20260829';
+        var BUILD_ID = 'v13.1-20260829';
         function hideBoot() {
             var boot = document.getElementById('boot');
             if (!boot || boot.dataset.hidden) return;
@@ -118,7 +118,12 @@
         function postSize() {
             syncVars();
             var h = appFrame.getBoundingClientRect().height;
-            postToApp({ type: 'inandon-safe', bottom: 0, height: h });
+            var pr = document.createElement('div');
+            pr.style.cssText = 'position:fixed;left:-9999px;top:0;visibility:hidden;padding-top:env(safe-area-inset-top);';
+            document.body.appendChild(pr);
+            var st = Math.round(parseFloat(getComputedStyle(pr).paddingTop) || 0);
+            pr.remove();
+            postToApp({ type: 'inandon-safe', bottom: 0, height: h, st: st });
         }
         // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ความสูง iframe จริง − ที่แอปเห็น
         window.addEventListener('message', function (e) {
