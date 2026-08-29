@@ -89,7 +89,8 @@
             maxVH = Math.max(maxVH, window.innerHeight);
             var inset = bottomInset();
             var f = document.getElementById('app');
-            var total = window.innerHeight + inset;
+            // ยึดความสูงจริงสูงสุด (maxVH) — iOS 26 standalone มักรายงานค่าหดแล้วค้าง
+            var total = maxVH + inset;
             if (f) f.style.height = total + 'px';
             // ส่งค่า inset เข้าไปในแอป (env() ใน iframe = 0 เสมอ)
             try {

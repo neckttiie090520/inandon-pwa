@@ -1,6 +1,6 @@
 /* Service Worker — InAndOnBill PWA
    Cache-first สำหรับ shell assets, passthrough สำหรับ GAS API */
-const STATIC_CACHE_KEY = 'inandon-shell-v1';
+const STATIC_CACHE_KEY = 'inandon-shell-v2';
 const PRECACHE = [
     './',
     './index.html',
@@ -37,7 +37,19 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(fetch(event.request));
         return;
     }
-    // Shell assets: cache-first
+    // HTML/นำทาง: network-first — อัปเดตถึงเครื่องทันทีที่ deploy (offline ใช้ cache สำรอง)
+    if (event.request.mode === 'navigate' ||
+        (event.request.headers.get('accept') || '').includes('text/html')) {
+        event.respondWith(
+            fetch(event.request).then((res) => {
+                const copy = res.clone();
+                caches.open(STATIC_CACHE_KEY).then((c) => c.put('./index.html', copy));
+                return res;
+            }).catch(() => caches.match('./index.html'))
+        );
+        return;
+    }
+    // แอสเซ็ตอื่น: cache-first
     event.respondWith(
         caches.match(event.request).then((cached) => cached || fetch(event.request))
     );
