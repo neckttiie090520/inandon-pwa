@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1848,6 +1848,32 @@
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
     }
 
+    .cust-group { margin-bottom: 20px; }
+    .cust-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: var(--accent-soft);
+        border: 2px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--foreground);
+        margin-bottom: 12px;
+    }
+    .cust-head .ti { color: var(--accent); }
+    .cust-count {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        background: var(--surface);
+        border: 1.5px solid var(--gray-300);
+        border-radius: var(--radius-full);
+        padding: 2px 10px;
+    }
+
     .sig-chip {
         display: inline-block;
         padding: 2px 10px;
@@ -1898,6 +1924,11 @@
             page-break-inside: avoid;
         }
     }
+    </style>
+    <style>
+        /* iOS app-like: ล็อกซูมระดับ CSS (เสริม gesturestart preventDefault) */
+        html, body { touch-action: manipulation; }
+        #pdfScroll { touch-action: pan-x pan-y; }
     </style>
 </head>
 <body>
@@ -2519,7 +2550,6 @@
     </script>
 
     <script>
-
     // ================================================================
     // Own-origin adapter: google.script.run → JSON API (text/plain POST)
     // auth = sha256(PIN) — แนบอัตโนมัติทุกครั้งหลังปลดล็อก
@@ -2533,45 +2563,38 @@
             body: JSON.stringify({ fn: fn, args: args, auth: window.sessionPinHash || '' })
         }).then(function (r) { return r.json(); });
     }
-    (function () {
-        const target = {
-            withSuccessHandler: function (f) { this._ok = f; return this; },
-            withFailureHandler: function (f) { this._fail = f; return this; }
-        };
-        window.google = window.google || {};
-        window.google.script = {
-            run: new Proxy(target, {
-                get: function (t, prop) {
-                    if (prop in t) return t[prop];
-                    return function () {
-                        const args = Array.prototype.slice.call(arguments);
-                        const p = api.apply(null, [String(prop)].concat(args));
-                        return p.then(
-                            function (r) { if (t._ok) t._ok(r); },
-                            function (e) { if (t._fail) t._fail(e); else throw e; }
-                        );
-                    };
-                }
-            })
-        };
-    })();
-    // โลโก้จาก config
+    function makeRunChain(ok, fail) {
+        return new Proxy({}, {
+            get: function (t, prop) {
+                if (prop === 'withSuccessHandler') return function (f) { return makeRunChain(f, fail); };
+                if (prop === 'withFailureHandler') return function (f) { return makeRunChain(ok, f); };
+                return function () {
+                    const args = Array.prototype.slice.call(arguments);
+                    return api.apply(null, [String(prop)].concat(args)).then(
+                        function (r) { if (ok) ok(r); },
+                        function (e) { if (fail) fail(e); else throw e; }
+                    );
+                };
+            }
+        });
+    }
+    window.google = window.google || {};
+    window.google.script = { run: makeRunChain(null, null) };
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
     };
-    // จำ hash ของ PIN ที่ปลดล็อก → ใช้ยืนยันกับ API
-    (function () {
-        const _tryUnlock = window.tryUnlock;
-        if (typeof _tryUnlock === 'function') {
-            window.tryUnlock = function () {
-                if (typeof sha256HexJs === 'function' && typeof pinBuffer !== 'undefined' && pinBuffer.length >= 4) {
-                    window.sessionPinHash = sha256HexJs(pinBuffer);
-                }
-                return _tryUnlock.apply(this, arguments);
-            };
-        }
-    })();
-
+    // ================================================================
+    // iOS app-like: ล็อกซูม (pinch / double-tap) กัน UI เพี้ยน
+    // ================================================================
+    document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+    document.addEventListener('gesturechange', function (e) { e.preventDefault(); });
+    document.addEventListener('dblclick', function (e) { e.preventDefault(); });
+    // SW: offline shell
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('sw.js').catch(function () {});
+        });
+    }
 
     </script>
     <script>
@@ -3555,7 +3578,18 @@
         }
 
         const shownH = history.slice(0, historyShown);
-        container.innerHTML = shownH.map(item => {
+        // จัดกลุ่มตามลูกค้า (รักษาลำดับใหม่สุดก่อน)
+        const groups = [];
+        const byName = {};
+        shownH.forEach(function (item) {
+            const key = item.customerName || 'ไม่ระบุลูกค้า';
+            if (!byName[key]) { byName[key] = { name: key, items: [] }; groups.push(byName[key]); }
+            byName[key].items.push(item);
+        });
+        container.innerHTML = groups.map(function (g) {
+            return '<div class="cust-group"><div class="cust-head"><i class="ti ti-user"></i> ' + escapeHtml(g.name) +
+                ' <span class="cust-count">' + g.items.length + ' เอกสาร</span></div>' +
+                g.items.map(item => {
             const isQuotation = item.type === 'quotation';
             const typeClass = isQuotation ? 'quotation' : 'bill';
             const typeText = item.currentType || (isQuotation ? 'ใบเสนอราคา' : 'บิลเงินสด');
@@ -3611,6 +3645,7 @@
         </div>
       </div>
     `;
+            }).join('') + '</div>';
         }).join('') +
             (history.length > shownH.length
                 ? '<div class="text-center" style="padding:8px 0 16px;"><button type="button" class="btn btn-outline" onclick="loadMoreHistory()"><i class="ti ti-reload"></i> โหลดเพิ่ม (เหลือ ' + (history.length - shownH.length) + ' รายการ)</button></div>'
@@ -4174,6 +4209,7 @@
         const err = document.getElementById('lockError');
         if (sha256HexJs(pinBuffer) === passcodeHash) {
             try { sessionStorage.setItem('inandon_unlocked', '1'); } catch (e) {}
+            window.sessionPinHash = sha256HexJs(pinBuffer); // own-origin: เก็บ hash ไว้ยืนยัน API
             const screen = document.getElementById('lockScreen');
             screen.style.opacity = '0';
             setTimeout(() => { screen.style.display = 'none'; }, 250);
@@ -4272,7 +4308,7 @@
     // แล้ว user กดปุ่มแชร์ของ iOS ในแท็บนั้น — native ทุกปลายทาง
     function openPdfInNewTab(viewUrl) {
         const id = extractFileId(viewUrl);
-        const url = id ? 'https://drive.google.com/uc?export=download&id=' + id : viewUrl;
+        const url = id ? 'https://drive.google.com/file/d/' + id + '/view' : viewUrl;
         const a = document.createElement('a');
         a.href = url;
         a.target = '_blank';
