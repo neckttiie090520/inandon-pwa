@@ -2625,51 +2625,64 @@
     <script>
     // ================================================================
     // Own-origin adapter: google.script.run → JSON API (text/plain POST)
-    // auth = sha256(PIN) — แนบอัตโนมัติทุกครั้งหลังปลดล็อก
+    // auth = sha256(PIN) — เก็บใน sessionStorage รอดข้าม reload / ฟังก์ชัน
+    // อ่านข้อมูล retry อัตโนมัติ 3 ครั้ง (ฟังก์ชันเขียนไม่ retry กันข้อมูลซ้ำ)
     // ================================================================
     var GAS_API = 'https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec';
+    const READ_FNS = ['getCombinedHistory', 'getAllCustomers', 'searchCustomers', 'getBillForEdit',
+        'getQuotationForEdit', 'getLatestDocumentForEdit', 'getPublicConfig', 'getSystemInfo',
+        'apiGetPdfBase64', 'formatMoney'];
+    function apiAuth() {
+        if (window.sessionPinHash) return window.sessionPinHash;
+        try { return sessionStorage.getItem('inandon_pin_hash') || ''; } catch (e) { return ''; }
+    }
     function api(fn) {
         const args = Array.prototype.slice.call(arguments, 1);
-        return fetch(GAS_API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ fn: fn, args: args, auth: window.sessionPinHash || '' })
-        }).then(function (r) { return r.json(); });
+        const auth = apiAuth();
+        const canRetry = READ_FNS.indexOf(fn) !== -1;
+        function once() {
+            return fetch(GAS_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ fn: fn, args: args, auth: auth })
+            }).then(function (r) { return r.text(); }).then(function (text) {
+                if (text.charAt(0) !== '{') throw new Error('SERVER_HTML');
+                return JSON.parse(text);
+            });
+        }
+        function attempt(n) {
+            return once().catch(function (e1) {
+                if (n <= 0 || (e1 && e1.needAuth)) throw e1;
+                return new Promise(function (res) { setTimeout(res, 800 / n); })
+                    .then(function () { return attempt(n - 1).catch(function (e2) { throw (e2 || e1); }); });
+            });
+        }
+        return attempt(canRetry ? 2 : 0);
     }
-    function makeRunChain(ok, fail) {
-        return new Proxy({}, {
-            get: function (t, prop) {
-                if (prop === 'withSuccessHandler') return function (f) { return makeRunChain(f, fail); };
-                if (prop === 'withFailureHandler') return function (f) { return makeRunChain(ok, f); };
-                return function () {
-                    const args = Array.prototype.slice.call(arguments);
-                    return api.apply(null, [String(prop)].concat(args)).then(
-                        function (r) { if (ok) ok(r); },
-                        function (e) { if (fail) fail(e); else throw e; }
-                    );
-                };
-            }
-        });
-    }
-    window.google = window.google || {};
-    window.google.script = { run: makeRunChain(null, null) };
+    (function () {
+        function makeRunChain(ok, fail) {
+            return new Proxy({}, {
+                get: function (t, prop) {
+                    if (prop === 'withSuccessHandler') return function (f) { return makeRunChain(f, fail); };
+                    if (prop === 'withFailureHandler') return function (f) { return makeRunChain(ok, f); };
+                    return function () {
+                        const args = Array.prototype.slice.call(arguments);
+                        const p = api.apply(null, [String(prop)].concat(args));
+                        return p.then(
+                            function (r) { if (ok) ok(r); },
+                            function (e) { if (fail) fail(e); else throw e; }
+                        );
+                    };
+                }
+            });
+        }
+        window.google = window.google || {};
+        window.google.script = { run: makeRunChain(null, null) };
+    })();
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
-        __hideBoot();
     };
-    window.__hideBoot = function () {
-        try {
-            const b = document.getElementById('bootScreen');
-            if (!b || b.dataset.done) return;
-            b.dataset.done = '1';
-            b.style.opacity = '0';
-            setTimeout(function () { b.style.display = 'none'; }, 300);
-        } catch (e) {}
-    };
-    setTimeout(function () { __hideBoot(); }, 15000); // failsafe
-    // ================================================================
-    // iOS app-like: ล็อกซูม (pinch / double-tap) กัน UI เพี้ยน
-    // ================================================================
+    // iOS app-like: ล็อกซูม (pinch / double-tap)
     document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
     document.addEventListener('gesturechange', function (e) { e.preventDefault(); });
     document.addEventListener('dblclick', function (e) { e.preventDefault(); });
@@ -4302,8 +4315,7 @@
     function tryUnlock() {
         const err = document.getElementById('lockError');
         if (sha256HexJs(pinBuffer) === passcodeHash) {
-            try { sessionStorage.setItem('inandon_unlocked', '1'); } catch (e) {}
-            window.sessionPinHash = sha256HexJs(pinBuffer); // own-origin: เก็บ hash ไว้ยืนยัน API
+            try { sessionStorage.setItem('inandon_unlocked', '1'); sessionStorage.setItem('inandon_pin_hash', sha256HexJs(pinBuffer)); } catch (e) {}
             const screen = document.getElementById('lockScreen');
             screen.style.opacity = '0';
             setTimeout(() => { screen.style.display = 'none'; }, 250);
@@ -4446,8 +4458,9 @@
     }
     function prefetchRecentPdfs() {
         if (!canShareFiles()) return;
-        currentHistory.slice(0, 5).forEach(function (item) {
-            cachePdf(extractFileId(item.pdfViewUrl || ''));
+        currentHistory.slice(0, 5).forEach(function (item, i) {
+            // ส่งทีละช่องว่างกันโดน quota burst
+            setTimeout(function () { cachePdf(extractFileId(item.pdfViewUrl || '')); }, i * 300);
         });
     }
 
