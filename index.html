@@ -1967,36 +1967,9 @@
         /* iOS app-like: ล็อกซูมระดับ CSS (เสริม gesturestart preventDefault) */
         html, body { touch-action: manipulation; }
         #pdfScroll { touch-action: pan-x pan-y; }
-        /* Boot / loading overlay */
-        #bootScreen {
-            position: fixed; inset: 0;
-            background: #FFFDF5;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            gap: 18px;
-            z-index: 999999;
-            font-family: system-ui, -apple-system, sans-serif;
-            color: #1E293B;
-            transition: opacity 0.3s;
-        }
-        #bootScreen img { width: 96px; height: 96px; border-radius: 20px; }
-        #bootScreen .ring {
-            width: 34px; height: 34px;
-            border: 3px solid #F5F3FF;
-            border-top-color: #8B5CF6;
-            border-radius: 50%;
-            animation: bspin 0.9s linear infinite;
-        }
-        #bootScreen .btxt { font-size: 15px; color: #64748B; }
-        @keyframes bspin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div id="bootScreen">
-        <img src="icons/apple-touch-icon.png" alt="">
-        <div class="ring"></div>
-        <div class="btxt" id="bootTxt">กำลังเชื่อมต่อระบบ...</div>
-    </div>
 
     <!-- PIN Lock Screen (iOS style) -->
     <div id="lockScreen" class="lock-screen">
@@ -2693,20 +2666,8 @@
         const b = document.getElementById('bootScreen');
         if (b) { b.style.opacity = '0'; setTimeout(function () { b.style.display = 'none'; }, 300); }
     };
-    window.__hideBoot = function () {
-        const b = document.getElementById('bootScreen');
-        if (!b || b.dataset.done) return;
-        b.dataset.done = '1';
-        b.style.opacity = '0';
-        setTimeout(function () { b.style.display = 'none'; }, 300);
-    };
-    window.__bootMsg = function (txt) {
-        const t = document.getElementById('bootTxt');
-        if (t && txt) t.textContent = txt;
-    };
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
-        __hideBoot();
     };
     // failsafe: config ค้างก็ปล่อยเข้าแอปได้ (โชว์ lock แทน)
     setTimeout(function () {
