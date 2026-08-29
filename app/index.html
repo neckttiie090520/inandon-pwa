@@ -2692,9 +2692,26 @@
         const b = document.getElementById('bootScreen');
         if (b) { b.style.opacity = '0'; setTimeout(function () { b.style.display = 'none'; }, 300); }
     };
+    window.__hideBoot = function () {
+        const b = document.getElementById('bootScreen');
+        if (!b || b.dataset.done) return;
+        b.dataset.done = '1';
+        b.style.opacity = '0';
+        setTimeout(function () { b.style.display = 'none'; }, 300);
+    };
+    window.__bootMsg = function (txt) {
+        const t = document.getElementById('bootTxt');
+        if (t && txt) t.textContent = txt;
+    };
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
+        __hideBoot();
     };
+    // failsafe: config ค้างก็ปล่อยเข้าแอปได้ (โชว์ lock แทน)
+    setTimeout(function () {
+        const b = document.getElementById('bootScreen');
+        if (b && !b.dataset.done) { b.dataset.done = '1'; b.style.opacity = '0'; setTimeout(function () { b.style.display = 'none'; }, 300); }
+    }, 20000);
     // iOS app-like: ล็อกซูม (pinch / double-tap)
     document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
     document.addEventListener('gesturechange', function (e) { e.preventDefault(); });
