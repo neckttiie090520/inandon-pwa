@@ -1,6 +1,6 @@
 /* Service Worker — InAndOnBill PWA
    Cache-first สำหรับ shell assets, passthrough สำหรับ GAS API */
-const STATIC_CACHE_KEY = 'inandon-shell-v2';
+const STATIC_CACHE_KEY = 'inandon-shell-v3';
 const PRECACHE = [
     './',
     './index.html',

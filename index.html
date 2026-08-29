@@ -24,8 +24,9 @@
         }
         iframe {
             position: fixed;
-            inset: 0;
+            left: 0;
             width: 100vw; width: 100dvw;
+            /* top/height สั่งด้วย JS — คำนวณจากความสูงแถบ Google ที่วัดสด */
             height: 100vh; height: 100dvh;
             border: 0;
         }
@@ -75,9 +76,13 @@
         document.getElementById('app').addEventListener('load', function () {
             setTimeout(hideBoot, 2500);
         });
-        // iframe สูงตาม innerHeight จริง + safe-area inset ที่ iOS ซ่อนไว้ท้ายจอ
-        // (ใน installed PWA: innerHeight ไม่รวมโซน home indicator → nav จะลอยเหนือขอบจริง)
-        var maxVH = window.innerHeight;
+        // ================================================================
+        // Self-measuring banner crop (แก้พื้นที่ว่างท้ายจอ)
+        // หน้า GAS = ตาราง 2 แถว: แถบ "สร้างโดยผู้ใช้ Google Apps Script"
+        // (บนสุด, สูงไม่คงที่) + แอปเราแถวล่าง → wrapper วัดความสูงจริง
+        // จากการรายงานของแอป แล้วดัน iframe ขึ้นเหนือจอพอดีแถบ แอปจะได้
+        // พื้นที่ = จอเต็ม 100% พอดีเป๊ะ ไม่ว่าแถบจะสูงเท่าไหร่
+        // ================================================================
         var insetEl = document.createElement('div');
         insetEl.style.cssText = 'position:fixed;bottom:0;left:0;height:0;padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
         document.body.appendChild(insetEl);
@@ -87,24 +92,46 @@
         }
         var GAS_URL = 'https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec';
         // cache-bust: ใส่ cb ใหม่ทุกครั้งที่เปิด → GAS ส่ง HTML ล่าสุดเสมอ
-        document.getElementById('app').src = GAS_URL + '?cb=' + Date.now();
-        function fitFrame() {
-            maxVH = Math.max(maxVH, window.innerHeight);
-            var inset = bottomInset();
-            var f = document.getElementById('app');
-            // ยึดความสูงจริงสูงสุด (maxVH) — iOS 26 standalone มักรายงานค่าหดแล้วค้าง
-            var total = maxVH + inset;
-            if (f) f.style.height = total + 'px';
-            // ส่งค่า inset เข้าไปในแอป (env() ใน iframe = 0 เสมอ)
-            try {
-                f.contentWindow.postMessage({ type: 'inandon-safe', bottom: inset, height: total }, '*');
-            } catch (e) {}
+        var appFrame = document.getElementById('app');
+        appFrame.src = GAS_URL + '?cb=' + Date.now();
+
+        var H = window.innerHeight;   // จอจริง (top window ใน installed PWA)
+        var bannerH = 0;              // ความสูงแถบ Google ที่วัดได้สด
+        var assignedH = 0;            // ความสูงที่สั่ง iframe ล่าสุด
+
+        function postToApp(msg) {
+            try { appFrame.contentWindow.postMessage(msg, '*'); } catch (e) {}
         }
-        fitFrame();
-        window.addEventListener('resize', function () { maxVH = Math.max(maxVH, window.innerHeight); fitFrame(); });
+        function applyGeom() {
+            assignedH = H + bannerH;
+            appFrame.style.top = (-bannerH) + 'px';   // แถบอยู่เหนือจอหมด
+            appFrame.style.height = assignedH + 'px'; // แอปได้ H พอดี
+            // env() ใน iframe = 0 เสมอ → ส่ง inset + ความสูงจอจริงเข้าไป
+            postToApp({ type: 'inandon-safe', bottom: bottomInset(), height: H });
+        }
+        // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ที่สั่ง − ที่เห็น
+        window.addEventListener('message', function (e) {
+            var d = e.data;
+            if (!d) return;
+            if (d.type === 'inandon-geom' && assignedH > 0) {
+                var ih = parseFloat(d.innerH) || 0;
+                if (ih > 0) {
+                    var b = Math.max(0, assignedH - ih);
+                    // tolerance 1px — กัน subpixel ทำ geometry แกว่งไปมา
+                    if (Math.abs(b - bannerH) > 1) { bannerH = b; applyGeom(); }
+                }
+            }
+            if (d.type === 'inandon-ready') hideBoot();
+        });
+        function fitFrame() {
+            H = window.innerHeight;
+            applyGeom();
+        }
+        applyGeom();
+        window.addEventListener('resize', fitFrame);
         window.addEventListener('orientationchange', function () { setTimeout(fitFrame, 250); });
         if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', function () { maxVH = Math.max(maxVH, window.innerHeight); fitFrame(); });
+            window.visualViewport.addEventListener('resize', fitFrame);
         }
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
