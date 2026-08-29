@@ -2650,15 +2650,16 @@
                 return JSON.parse(text);
             });
         }
-        function attempt(n) {
+        const RETRY_DELAYS = [3000, 8000, 15000, 25000, 40000];
+        function attempt(i) {
             return once().catch(function (e1) {
                 if (e1 && e1.needAuth) { try { window.__forceLock(); } catch (e) {} throw e1; }
-                if (n <= 0 || (e1 && (e1.name === 'AbortError'))) throw e1;
-                return new Promise(function (res) { setTimeout(res, 800 / n); })
-                    .then(function () { return attempt(n - 1).catch(function (e2) { throw (e2 || e1); }); });
+                if (i >= RETRY_DELAYS.length) throw e1;
+                return new Promise(function (res) { setTimeout(res, RETRY_DELAYS[i]); })
+                    .then(function () { return attempt(i + 1).catch(function (e2) { throw (e2 || e1); }); });
             });
         }
-        return attempt(canRetry ? 2 : 0);
+        return canRetry ? attempt(0) : once().catch(function (e) { throw e; });
     }
     (function () {
         function makeRunChain(ok, fail) {
