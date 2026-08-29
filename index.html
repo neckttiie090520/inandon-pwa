@@ -74,10 +74,8 @@
         <div>กำลังเชื่อมต่อระบบ...</div>
     </div>
     <div id="frameWrap"><iframe id="app" allow="fullscreen; web-share" title="InAndOnBill"></iframe></div>
-    <!-- Debug overlay — วัดค่าจริงบนเครื่องผู้ใช้ (ลบออกเมื่อแก้ fullscreen เสร็จ) -->
-    <div id="dbg" style="position:fixed;bottom:2px;left:6px;z-index:99999;font:10px/1.4 ui-monospace,Menlo,monospace;color:#0F766E;background:rgba(255,253,245,.9);border:1px solid #0F766E;border-radius:6px;padding:2px 6px;pointer-events:none;">shell: boot…</div>
     <script>
-        var BUILD_ID = 'v11-20260829';
+        var BUILD_ID = 'v12-20260829';
         function hideBoot() {
             var boot = document.getElementById('boot');
             if (!boot || boot.dataset.hidden) return;
@@ -97,11 +95,9 @@
         });
 
         // ================================================================
-        // Geometry v6 (CSS-first) — หน้า GAS ฝังแถบ "สร้างโดยผู้ใช้ Apps
-        // Script" ไว้บนหัว (สูงไม่คงที่) วิธีเดียวที่เสถียร: วัดจากการ
-        // รายงานของแอป แล้วตั้ง --banner-h ให้ CSS crop ขึ้นเหนือจอ
-        // ห้ามอ่าน window.innerHeight มาตั้งขนาด — ค่าของ iOS เพี้ยนตอน
-        // launch/คีย์บอร์ด/หมุนจอ คือต้นตอของอาการ "เต็มจอแล้วกลับไปเหมือนเดิม"
+        // Geometry — หน้า GAS ฝังแถบ "สร้างโดยผู้ใช้ Apps Script" ไว้บนหัว
+        // (สูงไม่คงที่) วิธีเดียวที่เสถียร: วัดจากการรายงานของแอป แล้วตั้ง
+        // --banner-h ให้ CSS crop ขึ้นเหนือจอ
         // ================================================================
         var GAS_URL = 'https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec';
         // (ทดลองฝัง userCodeAppPanel ตรงแล้วพัง — Google ไม่ยัด user HTML เว้นแต่
@@ -119,39 +115,10 @@
             document.documentElement.style.setProperty('--banner-h', bannerH + 'px');
         }
         // ความสูงจริง = ค่าที่ browser ยืด iframe ตาม top/bottom anchor — ไม่อ่าน innerHeight/dvh
-        function cssH(v) {
-            var el = document.createElement('div');
-            el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:' + v + ';visibility:hidden;';
-            document.body.appendChild(el);
-            var h = Math.round(el.getBoundingClientRect().height);
-            el.remove();
-            return h;
-        }
         function postSize() {
             syncVars();
             var h = appFrame.getBoundingClientRect().height;
             postToApp({ type: 'inandon-safe', bottom: 0, height: h });
-            // debug overlay — ค่าจริงบนเครื่องผู้ใช้ (ตาม WebKit bug 301994 signature)
-            try {
-                var pr = document.createElement('div');
-                pr.style.cssText = 'position:fixed;left:-9999px;top:0;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);';
-                document.body.appendChild(pr);
-                var pcs = getComputedStyle(pr);
-                var st = Math.round(parseFloat(pcs.paddingTop) || 0), sb = Math.round(parseFloat(pcs.paddingBottom) || 0);
-                pr.remove();
-                var ch = document.documentElement.clientHeight;
-                var scr = (window.screen && screen.height) || 0;
-                var vv = (window.visualViewport && Math.round(window.visualViewport.height)) || 0;
-                document.getElementById('dbg').innerHTML =
-                    'shell ' + BUILD_ID + ' | b:' + bannerH +
-                    ' sw:' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 1 : 0) +
-                    ' sa:' + (navigator.standalone ? 1 : 0) +
-                    '<br>scr:' + scr + ' ch:' + ch + ' gap:' + (scr - ch) +
-                    '<br>dvh:' + cssH('100dvh') + ' vh:' + cssH('100vh') +
-                    ' lvh:' + cssH('100lvh') + ' vv:' + vv +
-                    '<br>st:' + st + ' sb:' + sb + ' iH:' + window.innerHeight +
-                    ' h:' + Math.round(h);
-            } catch (e) {}
         }
         // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ความสูง iframe จริง − ที่แอปเห็น
         window.addEventListener('message', function (e) {
