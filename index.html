@@ -15,28 +15,36 @@
     <title>InAndOnBill</title>
     <style>
         /* ================================================================
-           CSS-first geometry — ขนาดพื้นฐานมาจาก 100dvh เสมอ (เบราว์เซอร์
-           คำนวณสดทุกสถานะ: standalone/Safari/หมุนจอ ไม่มี JS state ให้ค้าง)
-           JS เติมเฉพาะ 2 ค่าที่นิ่ง: --banner-h (แถบ Google ที่วัดได้)
-           และ --safe-inset (โซน home indicator จาก env())
+           v8 anchor geometry — ไม่ใช้ตัวเลขความสูงใด ๆ ทั้งสิ้น
+           (innerHeight/dvh ของ iOS standalone รายงานเกินโซน home indicator
+           บางเครื่อง ส่วน env() = 0 ตรวจไม่ได้ → ทุกสูตรคำนวณพัง)
+           วิธีที่พังไม่ได้: ยึด iframe ระหว่างขอบบน+ขอบล่าง viewport
+           แล้วให้ browser ยืดเอง — จุดที่ browser วาดขอบล่าง = จุดที่แอปจบ
            ================================================================ */
-        :root { --banner-h: 0px; --safe-inset: 0px; }
+        :root { --banner-h: 0px; }
         html, body {
+            position: fixed;
+            inset: 0;
             margin: 0; padding: 0;
-            height: 100vh; height: 100dvh;
             overflow: hidden;
             background: #FFFDF5;
             overscroll-behavior: none;
         }
-        iframe {
+        /* ตัวเหนือกาว: ยึดขอบบน(เหนือ banner)+ขอบล่าง viewport — div (non-replaced)
+           ยืดตาม anchor ได้จริง ส่วน iframe (replaced) ยืดไม่ได้จึงต้องห่อ */
+        #frameWrap {
             position: fixed;
             left: 0;
-            width: 100vw; width: 100dvw;
-            /* banner อยู่เหนือจอหมด, แอปลงท้ายถึงขอบล่างจริง (รวมโซน home indicator) */
+            right: 0;
             top: calc(0px - var(--banner-h));
-            height: calc(100vh + var(--banner-h) + var(--safe-inset));
-            height: calc(100dvh + var(--banner-h) + var(--safe-inset));
+            bottom: 0;
+            overflow: hidden;
+        }
+        #app {
+            width: 100%;
+            height: 100%;
             border: 0;
+            display: block;
         }
         .boot {
             position: fixed; inset: 0;
@@ -65,11 +73,11 @@
         <div class="ring"></div>
         <div>กำลังเชื่อมต่อระบบ...</div>
     </div>
-    <iframe id="app" allow="fullscreen; web-share" title="InAndOnBill"></iframe>
+    <div id="frameWrap"><iframe id="app" allow="fullscreen; web-share" title="InAndOnBill"></iframe></div>
     <!-- Debug overlay — วัดค่าจริงบนเครื่องผู้ใช้ (ลบออกเมื่อแก้ fullscreen เสร็จ) -->
     <div id="dbg" style="position:fixed;bottom:2px;left:6px;z-index:99999;font:10px/1.4 ui-monospace,Menlo,monospace;color:#0F766E;background:rgba(255,253,245,.9);border:1px solid #0F766E;border-radius:6px;padding:2px 6px;pointer-events:none;">shell: boot…</div>
     <script>
-        var BUILD_ID = 'v7-20260829';
+        var BUILD_ID = 'v8-20260829';
         function hideBoot() {
             var boot = document.getElementById('boot');
             if (!boot || boot.dataset.hidden) return;
@@ -103,34 +111,22 @@
         var bannerH = 0;      // ความสูงแถบ Google (px) ที่วัดได้
         var rearmUntil = 0;   // ช่วงที่ยอมรับ banner ใหม่ได้อิสระ (resume/หมุนจอ)
 
-        // probe env(safe-area-inset-bottom) — env() ใน iframe = 0 เสมอ ต้องวัดที่ top window
-        var insetEl = document.createElement('div');
-        insetEl.style.cssText = 'position:fixed;bottom:0;left:0;height:0;padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
-        document.body.appendChild(insetEl);
-        function insetPx() {
-            var h = insetEl.getBoundingClientRect().height;
-            return isNaN(h) ? 0 : h;
-        }
         function postToApp(msg) {
             try { appFrame.contentWindow.postMessage(msg, '*'); } catch (e) {}
         }
         function syncVars() {
-            var inset = insetPx();
-            var root = document.documentElement.style;
-            root.setProperty('--safe-inset', inset + 'px');
-            root.setProperty('--banner-h', bannerH + 'px');
-            return inset;
+            document.documentElement.style.setProperty('--banner-h', bannerH + 'px');
         }
-        // ความสูงจริงมาจาก CSS (rect ของ body = 100dvh ณ ขณะนั้น) ไม่ใช่ innerHeight
+        // ความสูงจริง = ค่าที่ browser ยืด iframe ตาม top/bottom anchor — ไม่อ่าน innerHeight/dvh
         function postSize() {
-            var inset = syncVars();
-            var dvh = document.body.getBoundingClientRect().height;
-            postToApp({ type: 'inandon-safe', bottom: inset, height: dvh + inset });
+            syncVars();
+            var h = appFrame.getBoundingClientRect().height;
+            postToApp({ type: 'inandon-safe', bottom: 0, height: h });
             // debug overlay — ค่าจริงบนเครื่องผู้ใช้
             try {
                 document.getElementById('dbg').textContent = 'shell ' + BUILD_ID +
-                    ' | dvh:' + Math.round(dvh) + ' ins:' + Math.round(inset) +
-                    ' b:' + bannerH + ' iH:' + window.innerHeight +
+                    ' | h:' + Math.round(h) + ' b:' + bannerH +
+                    ' iH:' + window.innerHeight +
                     ' sa:' + (navigator.standalone ? 1 : 0) +
                     ' sw:' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 1 : 0);
             } catch (e) {}
