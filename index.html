@@ -65,8 +65,11 @@
         <div class="ring"></div>
         <div>กำลังเชื่อมต่อระบบ...</div>
     </div>
-    <iframe id="app" allow="fullscreen" title="InAndOnBill"></iframe>
+    <iframe id="app" allow="fullscreen; web-share" title="InAndOnBill"></iframe>
+    <!-- Debug overlay — วัดค่าจริงบนเครื่องผู้ใช้ (ลบออกเมื่อแก้ fullscreen เสร็จ) -->
+    <div id="dbg" style="position:fixed;bottom:2px;left:6px;z-index:99999;font:10px/1.4 ui-monospace,Menlo,monospace;color:#0F766E;background:rgba(255,253,245,.9);border:1px solid #0F766E;border-radius:6px;padding:2px 6px;pointer-events:none;">shell: boot…</div>
     <script>
+        var BUILD_ID = 'v7-20260829';
         function hideBoot() {
             var boot = document.getElementById('boot');
             if (!boot || boot.dataset.hidden) return;
@@ -123,6 +126,14 @@
             var inset = syncVars();
             var dvh = document.body.getBoundingClientRect().height;
             postToApp({ type: 'inandon-safe', bottom: inset, height: dvh + inset });
+            // debug overlay — ค่าจริงบนเครื่องผู้ใช้
+            try {
+                document.getElementById('dbg').textContent = 'shell ' + BUILD_ID +
+                    ' | dvh:' + Math.round(dvh) + ' ins:' + Math.round(inset) +
+                    ' b:' + bannerH + ' iH:' + window.innerHeight +
+                    ' sa:' + (navigator.standalone ? 1 : 0) +
+                    ' sw:' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 1 : 0);
+            } catch (e) {}
         }
         // แอปรายงาน innerHeight ที่มันเห็น → bannerH = ความสูง iframe จริง − ที่แอปเห็น
         window.addEventListener('message', function (e) {
@@ -165,7 +176,6 @@
         // ดึง shell ล่าสุดจากเน็ต (__upd=1 ให้ SW ข้าม cache) เทียบ BUILD_ID
         // ถ้าต่าง = อัปเดต SW + reload 1 ครั้ง (ผู้ใช้ไม่ต้องติดตั้งใหม่)
         // ================================================================
-        var BUILD_ID = 'v6-20260829';
         (function () {
             if (!window.fetch) return;
             function maybeReload(newId) {
