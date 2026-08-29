@@ -2652,7 +2652,8 @@
         }
         function attempt(n) {
             return once().catch(function (e1) {
-                if (n <= 0 || (e1 && e1.needAuth)) throw e1;
+                if (e1 && e1.needAuth) { try { window.__forceLock(); } catch (e) {} throw e1; }
+                if (n <= 0 || (e1 && (e1.name === 'AbortError'))) throw e1;
                 return new Promise(function (res) { setTimeout(res, 800 / n); })
                     .then(function () { return attempt(n - 1).catch(function (e2) { throw (e2 || e1); }); });
             });
@@ -2679,6 +2680,18 @@
         window.google = window.google || {};
         window.google.script = { run: makeRunChain(null, null) };
     })();
+    // บังคับล็อกกลับ (เมื่อ API รายงาน needAuth) — ผู้ใช้ใส่ PIN ใหม่แล้วระบบกลับมาทำงาน
+    window.__forceLock = function () {
+        try { sessionStorage.removeItem('inandon_unlocked'); } catch (e) {}
+        const lock = document.getElementById('lockScreen');
+        if (lock) {
+            lock.style.display = 'flex';
+            lock.style.opacity = '1';
+            if (typeof initLockScreen === 'function') initLockScreen();
+        }
+        const b = document.getElementById('bootScreen');
+        if (b) { b.style.opacity = '0'; setTimeout(function () { b.style.display = 'none'; }, 300); }
+    };
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
     };
