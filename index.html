@@ -3640,6 +3640,17 @@
     // History Management
     // ====================================================================
 
+    // แคชข้อมูลล่าสุด — GAS/เน็ตล่ม ผู้ใช้ยังเห็นข้อมูลล่าสุดพร้อมป้ายเวลา
+    function cacheData(key, data) {
+        try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data })); } catch (e) {}
+    }
+    function readCache(key) {
+        try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v ? v.d : null; } catch (e) { return null; }
+    }
+    function cacheAge(key) {
+        try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v ? Math.round((Date.now() - v.t) / 60000) : null; } catch (e) { return null; }
+    }
+
     function loadHistoryData() {
         const container = document.getElementById('historyList');
         container.innerHTML = `
@@ -3666,9 +3677,19 @@
         historyShown = LIST_PAGE;
         displayHistory(history);
         prefetchRecentPdfs();
+        cacheData('cache_history', history);
     }
 
     function handleHistoryError(error) {
+        const cached = readCache('cache_history');
+        if (cached && cached.length) {
+            currentHistory = cached;
+            historyShown = LIST_PAGE;
+            displayHistory(cached);
+            const age = cacheAge('cache_history');
+            showAlert('เชื่อมต่อไม่ได้ — แสดงข้อมูลล่าสุดที่บันทึกไว้ (อายุ ' + (age === null ? '?' : age) + ' นาที)', 'warning');
+            return;
+        }
         const container = document.getElementById('historyList');
         container.innerHTML = `
     <div class="empty-state">
@@ -3844,15 +3865,23 @@
         currentCustomers = customers;
         customersShown = LIST_PAGE;
         displayCustomersList(customers);
+        cacheData('cache_customers', customers);
     }
 
     function handleCustomersListError(error) {
+        const cached = readCache('cache_customers');
+        if (cached && cached.length) {
+            currentCustomers = cached;
+            customersShown = LIST_PAGE;
+            displayCustomersList(cached);
+            showAlert('เชื่อมต่อไม่ได้ — แสดงรายชื่อล่าสุดที่บันทึกไว้', 'warning');
+            return;
+        }
         const container = document.getElementById('customersList');
         container.innerHTML = `
-    <div class="empty-state">
-      <span class="empty-icon"><i class="ti ti-alert-triangle"></i></span>
-      <p>ไม่สามารถโหลดข้อมูลลูกค้าได้</p>
-      <button class="btn btn-primary" onclick="loadCustomersData()">ลองใหม่</button>
+    <div class="text-center" style="padding: 40px;">
+      <div class="spinner"></div>
+      <p>กำลังโหลดข้อมูลลูกค้า...</p>
     </div>
   `;
     }
