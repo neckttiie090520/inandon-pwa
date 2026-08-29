@@ -75,16 +75,30 @@
         document.getElementById('app').addEventListener('load', function () {
             setTimeout(hideBoot, 2500);
         });
-        // iframe สูงตาม innerHeight จริงเสมอ — ไม่พึ่ง dvh ที่ค้างบน iOS 26 standalone
+        // iframe สูงตาม innerHeight จริง + safe-area inset ที่ iOS ซ่อนไว้ท้ายจอ
+        // (ใน installed PWA: innerHeight ไม่รวมโซน home indicator → nav จะลอยเหนือขอบจริง)
         var maxVH = window.innerHeight;
+        var insetEl = document.createElement('div');
+        insetEl.style.cssText = 'position:fixed;bottom:0;left:0;height:0;padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
+        document.body.appendChild(insetEl);
+        function bottomInset() {
+            var h = insetEl.getBoundingClientRect().height;
+            return isNaN(h) ? 0 : h;
+        }
         function fitFrame() {
             maxVH = Math.max(maxVH, window.innerHeight);
+            var inset = bottomInset();
             var f = document.getElementById('app');
-            if (f) f.style.height = window.innerHeight + 'px';
+            var total = window.innerHeight + inset;
+            if (f) f.style.height = total + 'px';
+            // ส่งค่า inset เข้าไปในแอป (env() ใน iframe = 0 เสมอ)
+            try {
+                f.contentWindow.postMessage({ type: 'inandon-safe', bottom: inset, height: total }, '*');
+            } catch (e) {}
         }
         fitFrame();
         window.addEventListener('resize', function () { maxVH = Math.max(maxVH, window.innerHeight); fitFrame(); });
-        window.addEventListener('orientationchange', fitFrame);
+        window.addEventListener('orientationchange', function () { setTimeout(fitFrame, 250); });
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', function () { maxVH = Math.max(maxVH, window.innerHeight); fitFrame(); });
         }
