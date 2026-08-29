@@ -75,6 +75,19 @@
         document.getElementById('app').addEventListener('load', function () {
             setTimeout(hideBoot, 2500);
         });
+        // iframe สูงตาม innerHeight จริงเสมอ — ไม่พึ่ง dvh ที่ค้างบน iOS 26 standalone
+        var maxVH = window.innerHeight;
+        function fitFrame() {
+            maxVH = Math.max(maxVH, window.innerHeight);
+            var f = document.getElementById('app');
+            if (f) f.style.height = window.innerHeight + 'px';
+        }
+        fitFrame();
+        window.addEventListener('resize', function () { maxVH = Math.max(maxVH, window.innerHeight); fitFrame(); });
+        window.addEventListener('orientationchange', fitFrame);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', function () { maxVH = Math.max(maxVH, window.innerHeight); fitFrame(); });
+        }
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('./sw.js').catch(function () {});
