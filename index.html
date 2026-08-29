@@ -77,7 +77,7 @@
     <!-- Debug overlay — วัดค่าจริงบนเครื่องผู้ใช้ (ลบออกเมื่อแก้ fullscreen เสร็จ) -->
     <div id="dbg" style="position:fixed;bottom:2px;left:6px;z-index:99999;font:10px/1.4 ui-monospace,Menlo,monospace;color:#0F766E;background:rgba(255,253,245,.9);border:1px solid #0F766E;border-radius:6px;padding:2px 6px;pointer-events:none;">shell: boot…</div>
     <script>
-        var BUILD_ID = 'v9-20260829';
+        var BUILD_ID = 'v10-20260829';
         function hideBoot() {
             var boot = document.getElementById('boot');
             if (!boot || boot.dataset.hidden) return;
@@ -104,20 +104,10 @@
         // launch/คีย์บอร์ด/หมุนจอ คือต้นตอของอาการ "เต็มจอแล้วกลับไปเหมือนเดิม"
         // ================================================================
         var GAS_URL = 'https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec';
-        // URL ตรงของแอป (ข้าม shell ของ Google): ไม่มีแถบ warning, no-cache เสมอ,
-        // และ web-share ผ่าน (Google ให้ allow web-share * กับ userHtmlFrame อยู่แล้ว)
-        // → navigator.share จากปุ่มในแอปเปิด share sheet จริงได้
-        var DIRECT_URL = 'https://n-cug2egiflqtj4boekbicehyir7g3buxiudt6edq-0lu-script.googleusercontent.com/userCodeAppPanel';
+        // (ทดลองฝัง userCodeAppPanel ตรงแล้วพัง — Google ไม่ยัด user HTML เว้นแต่
+        // parent เป็นหน้า /exec → กลับมาใช้ /exec + cache-bust ตามเดิม)
         var appFrame = document.getElementById('app');
-        appFrame.src = DIRECT_URL;
-        var readySeen = false;
-        window.addEventListener('message', function (e) {
-            if (e.data && (e.data.type === 'inandon-ready' || e.data.type === 'inandon-geom')) readySeen = true;
-        });
-        // ถ้า 15 วิยังไม่พร้อม (Google หมุน host ทำ URL ตาย) → ย้ายกลับไป /exec shell
-        setTimeout(function () {
-            if (!readySeen) appFrame.src = GAS_URL + '?cb=' + Date.now();
-        }, 15000);
+        appFrame.src = GAS_URL + '?cb=' + Date.now();
 
         var bannerH = 0;      // ความสูงแถบ Google (px) ที่วัดได้
         var rearmUntil = 0;   // ช่วงที่ยอมรับ banner ใหม่ได้อิสระ (resume/หมุนจอ)
