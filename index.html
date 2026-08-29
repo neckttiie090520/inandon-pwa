@@ -56,7 +56,7 @@
         <div class="ring"></div>
         <div>กำลังเชื่อมต่อระบบ...</div>
     </div>
-    <iframe id="app" src="https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec" allow="fullscreen" title="InAndOnBill"></iframe>
+    <iframe id="app" allow="fullscreen" title="InAndOnBill"></iframe>
     <script>
         function hideBoot() {
             var boot = document.getElementById('boot');
@@ -85,6 +85,9 @@
             var h = insetEl.getBoundingClientRect().height;
             return isNaN(h) ? 0 : h;
         }
+        var GAS_URL = 'https://script.google.com/macros/s/AKfycbwrCUiqAlE8P5EJ3iJ4w2aa3AoUgZ0MWYgq8uftNCUu2-aabMWgtyLbFTSK9xnEPzRF/exec';
+        // cache-bust: ใส่ cb ใหม่ทุกครั้งที่เปิด → GAS ส่ง HTML ล่าสุดเสมอ
+        document.getElementById('app').src = GAS_URL + '?cb=' + Date.now();
         function fitFrame() {
             maxVH = Math.max(maxVH, window.innerHeight);
             var inset = bottomInset();
