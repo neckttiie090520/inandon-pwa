@@ -4,8 +4,6 @@ const STATIC_CACHE_KEY = 'inandon-shell-v3';
 const PRECACHE = [
     './',
     './index.html',
-    './styles.css',
-    './app.js',
     './manifest.webmanifest',
     './icons/icon-192.png',
     './icons/icon-512.png',
@@ -13,8 +11,13 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+    // แคชทีละไฟล์ — ไฟล์ไหนหายไม่ให้ทั้ง install พัง (เคยทำให้ SW ตายถาวร)
     event.waitUntil(
-        caches.open(STATIC_CACHE_KEY).then((cache) => cache.addAll(PRECACHE))
+        caches.open(STATIC_CACHE_KEY).then((cache) =>
+            Promise.all(PRECACHE.map((u) =>
+                cache.add(new Request(u, { cache: 'reload' })).catch(() => {})
+            ))
+        )
     );
     self.skipWaiting();
 });
