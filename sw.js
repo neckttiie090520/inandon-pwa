@@ -1,7 +1,7 @@
-const CACHE = 'inandon-app-v3';
+const CACHE = 'inandon-app-v4';
 self.addEventListener('install', (e) => {
     e.waitUntil(caches.open(CACHE).then((c) =>
-        Promise.all(['./', './manifest.webmanifest'].map((u) =>
+        Promise.all(['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'].map((u) =>
             c.add(new Request(u, { cache: 'reload' })).catch(() => {})
         ))
     ));
@@ -14,9 +14,20 @@ self.addEventListener('activate', (e) => {
     self.clients.claim();
 });
 self.addEventListener('fetch', (event) => {
-    // ข้าม cross-origin requests — SW จัดการเฉพาะ same-origin
-    if (!event.request.url.startsWith(self.location.origin)) return;
     const url = event.request.url;
+    // CDN ภายนอก (fonts / tabler icons): cache-first — เครื่องที่เคยเปิดแล้วไม่โหลดซ้ำจากเน็ต
+    if (!url.startsWith(self.location.origin)) {
+        if (event.request.method !== 'GET') return;
+        if (!/^(https:\/\/fonts\.googleapis\.com\/|https:\/\/fonts\.gstatic\.com\/|https:\/\/cdn\.jsdelivr\.net\/)/.test(url)) return;
+        event.respondWith(caches.open(CACHE).then(async (cache) => {
+            const hit = await cache.match(event.request);
+            if (hit) return hit;
+            const res = await fetch(event.request);
+            if (res.ok || res.type === 'opaque') cache.put(event.request, res.clone());
+            return res;
+        }));
+        return;
+    }
     if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
         // เปิดแอปทันทีจาก cache แล้วอัปเดตในพื้นหลัง (stale-while-revalidate)
         // เดิม network-first: สัญญาณอ่อน/GAS เย็น = เปิดค้างจอดำจน network ตอบ
