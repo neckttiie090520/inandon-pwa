@@ -8,6 +8,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="InAndOnBill">
     <meta name="theme-color" content="#FFFDF5">
+    <!-- instant paint: bg ทันทีก่อน CDN CSS มา (กันจอว่าง/ดำตอนเปิดแอปครั้งแรก-เครื่องเย็น) -->
+    <style>html{background:#FFFDF5}</style>
+    <!-- pre-apply saved theme ก่อน first paint (กันแฟลชขาว/ดำสลับธีม) -->
+    <script>(function () { try { if (localStorage.getItem('inandon_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {} })();</script>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1735,6 +1739,12 @@
         font-weight: 600;
     }
 
+    /* สถานะ 'กำลังโหลดระบบ…' บนหน้า lock — สีเทา ไม่ใช่สีแดง error */
+    .lock-error.lock-status {
+        color: var(--muted-foreground);
+        font-weight: 500;
+    }
+
     .lock-pad {
         display: grid;
         grid-template-columns: repeat(3, 72px);
@@ -2673,17 +2683,10 @@
             lock.style.opacity = '1';
             if (typeof initLockScreen === 'function') initLockScreen();
         }
-        const b = document.getElementById('bootScreen');
-        if (b) { b.style.opacity = '0'; setTimeout(function () { b.style.display = 'none'; }, 300); }
     };
     window.__applyConfig = function (cfg) {
         try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
     };
-    // failsafe: config ค้างก็ปล่อยเข้าแอปได้ (โชว์ lock แทน)
-    setTimeout(function () {
-        const b = document.getElementById('bootScreen');
-        if (b && !b.dataset.done) { b.dataset.done = '1'; b.style.opacity = '0'; setTimeout(function () { b.style.display = 'none'; }, 300); }
-    }, 20000);
     // iOS app-like: ล็อกซูม (pinch / double-tap)
     document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
     document.addEventListener('gesturechange', function (e) { e.preventDefault(); });
@@ -2721,7 +2724,10 @@
             // Apply saved dark/light theme
             applySavedTheme();
 
-            // โหลดค่าลายเซ็นร้าน + PIN hash (แสดง lock ถ้ายังไม่ปลดล็อก)
+            // โชว์หน้า lock + keypad ทันที (ไม่รอ API — กันจอดำ/ว่างตอน GAS โหลดช้า/เย็น)
+            showLockIfLocked();
+
+            // โหลดค่าลายเซ็นร้าน + PIN hash (hash มาทีหลัง — พิมพ์ PIN ระหว่างรอได้ ระบบแจ้งสถานะ)
             loadPublicConfig();
             initPasscode();
 
@@ -4346,6 +4352,16 @@
 
     function tryUnlock() {
         const err = document.getElementById('lockError');
+        if (err) err.textContent = '';
+        // hash ยังไม่มา (GAS โหลดช้า) — แจ้งสถานะและดึงใหม่ ไม่ใช่ตอน 'รหัสไม่ถูกต้อง'
+        // เคลียร์ buffer ด้วย ไม่งั้น buffer เต็มค้าง → กดเลขใหม่ไม่ได้ (guard length>=6)
+        if (!passcodeHash) {
+            if (err) { err.textContent = 'ระบบกำลังโหลด รอสักครู่แล้วลองอีกครั้ง'; }
+            pinBuffer = '';
+            renderDots();
+            initPasscode();
+            return;
+        }
         if (sha256HexJs(pinBuffer) === passcodeHash) {
             try { sessionStorage.setItem('inandon_unlocked', '1'); sessionStorage.setItem('inandon_pin_hash', sha256HexJs(pinBuffer)); } catch (e) {}
             const screen = document.getElementById('lockScreen');
@@ -4388,9 +4404,16 @@
 
     // ดึง hash แล้วแสดง lock ก่อนใช้งาน
     function initPasscode() {
+        // แสดงสถานะกำลังโหลดระหว่างรอ hash (หน้า lock เห็น keypad แล้ว — แตะก่อน hash พร้อมจะแจ้งสถานะ ไม่ใช่ 'รหัสไม่ถูก')
+        if (!passcodeHash) {
+            const s = document.getElementById('lockError');
+            if (s) { s.textContent = 'กำลังโหลดระบบ…'; s.classList.add('lock-status'); }
+        }
         google.script.run
             .withSuccessHandler(config => {
                 passcodeHash = (config && config.passcodeHash) || '';
+                const s = document.getElementById('lockError');
+                if (s && s.textContent === 'กำลังโหลดระบบ…') { s.textContent = ''; s.classList.remove('lock-status'); }
                 if (passcodeHash) showLockIfLocked();
             })
             .withFailureHandler(() => { notifyReady(); })

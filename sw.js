@@ -1,4 +1,4 @@
-const CACHE = 'inandon-app-v2';
+const CACHE = 'inandon-app-v3';
 self.addEventListener('install', (e) => {
     e.waitUntil(caches.open(CACHE).then((c) =>
         Promise.all(['./', './manifest.webmanifest'].map((u) =>
@@ -18,7 +18,18 @@ self.addEventListener('fetch', (event) => {
     if (!event.request.url.startsWith(self.location.origin)) return;
     const url = event.request.url;
     if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
-        event.respondWith(fetch(event.request).catch(() => caches.match('./')));
+        // เปิดแอปทันทีจาก cache แล้วอัปเดตในพื้นหลัง (stale-while-revalidate)
+        // เดิม network-first: สัญญาณอ่อน/GAS เย็น = เปิดค้างจอดำจน network ตอบ
+        event.respondWith((async () => {
+            const cache = await caches.open(CACHE);
+            const hit = await cache.match('./');
+            const update = fetch(event.request).then((res) => {
+                if (res.ok) { cache.put('./', res.clone()); }
+                return res;
+            });
+            event.waitUntil(update.catch(() => {}));
+            return hit || update;
+        })());
         return;
     }
     event.respondWith(
