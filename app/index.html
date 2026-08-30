@@ -1748,6 +1748,22 @@
         font-weight: 600;
     }
 
+    /* อายุเอกสารแบบสัมพัทธ์ (3 ชั่วโมงที่แล้ว / 2 สัปดาห์ที่แล้ว) */
+    .age-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--muted);
+        color: var(--muted-foreground);
+        font-size: 11px;
+        font-weight: 600;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
     /* Boot Screen (In and On OS) — macOS-like */
     .boot-screen {
         position: fixed;
@@ -3855,6 +3871,7 @@
             <div class="history-item-number">
               ${escapeHtml(item.displayNumber)}
               <span class="history-item-type ${typeClass}">${typeText}</span>
+              ${item.createdAt ? `<span class="age-chip"><i class="ti ti-clock"></i> ${timeAgoThai(item.createdAt)}</span>` : ''}
               ${item.signed
                 ? '<span class="sig-chip signed"><i class="ti ti-signature"></i> มีลายเซ็น</span>'
                 : (item.sigKnown
@@ -5157,6 +5174,24 @@
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         }).format(amount);
+    }
+
+    // เวลาแบบสัมพัทธ์ภาษาไทย จาก createdAt (ISO) — สักครู่/นาที/ชั่วโมง/วัน/สัปดาห์/เดือน/ปี ที่แล้ว
+    function timeAgoThai(iso) {
+        if (!iso) return '';
+        const t = new Date(iso).getTime();
+        if (isNaN(t)) return '';
+        const s = Math.floor((Date.now() - t) / 1000);
+        if (s < 60) return 'เมื่อสักครู่'; // รวมกรณีนาฬิกาเครื่องเหลื่อมไปข้างหน้า
+        const m = Math.floor(s / 60);
+        if (m < 60) return m + ' นาทีที่แล้ว';
+        const h = Math.floor(m / 60);
+        if (h < 24) return h + ' ชั่วโมงที่แล้ว';
+        const d = Math.floor(h / 24);
+        if (d < 7) return d + ' วันที่แล้ว';
+        if (d < 30) return Math.floor(d / 7) + ' สัปดาห์ที่แล้ว';
+        if (d < 365) return Math.floor(d / 30) + ' เดือนที่แล้ว';
+        return Math.floor(d / 365) + ' ปีที่แล้ว';
     }
 
     // แปลงตัวเลขเป็นคำไทยแบบเต็ม — เหมือน backend เพื่อให้การแสดงผลตรงกับเอกสาร (BUG-16)
