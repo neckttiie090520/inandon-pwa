@@ -2632,13 +2632,17 @@
         const RETRY_DELAYS = [2000, 6000, 15000];
         function attempt(i) {
             return once().catch(function (e1) {
-                if (e1 && e1.needAuth) { try { window.__forceLock(); } catch (e) {} throw e1; }
                 if (i >= RETRY_DELAYS.length) throw e1;
                 return new Promise(function (res) { setTimeout(res, RETRY_DELAYS[i]); })
                     .then(function () { return attempt(i + 1).catch(function (e2) { throw (e2 || e1); }); });
             });
         }
-        return canRetry ? attempt(0) : once().catch(function (e) { throw e; });
+        const run = canRetry ? attempt(0) : once();
+        // GAS ตอบ needAuth ด้วย HTTP 200 + JSON (ไม่ reject) — ต้องเช็คใน success path ไม่ใช่ catch
+        return run.then(function (r) {
+            if (r && r.needAuth) { try { window.__forceLock(); } catch (e) {} }
+            return r;
+        });
     }
     (function () {
         function makeRunChain(ok, fail) {
@@ -3670,7 +3674,7 @@
 
     let historyRenderList = [], historyShown = 20;
     let customersRenderList = [], customersShown = 20;
-    const LIST_PAGE = 20;
+    const LIST_PAGE = 100;
 
     function loadMoreHistory() {
         historyShown += LIST_PAGE;
