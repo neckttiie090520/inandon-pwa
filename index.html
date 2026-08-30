@@ -4899,14 +4899,46 @@
     function shareLastLink() {
         if (lastPdfResult && lastPdfResult.pdfViewUrl) {
             shareLinkFlow(lastPdfResult.pdfViewUrl,
-                lastPdfResult.billNumber || lastPdfResult.quotationNumber || '');
+                lastPdfResult.billNumber || lastPdfResult.quotationNumber || '',
+                lastPdfResult.totalAmount);
         } else {
             showAlert('ไม่พบไฟล์ PDF', 'warning');
         }
     }
 
-    // เปิดสิทธิ์ "ทุกคนที่มีลิงก์" (ครั้งเดียวต่อไฟล์) แล้ว share เป็นลิงก์
-    async function shareLinkFlow(viewUrl, docNumber) {
+    // ---- ข้อความแชร์ลิงก์แบบมืออาชีพ: ชนิดเอกสาร/เลขที่/ลูกค้า/วันที่ (พ.ศ.)/ยอดรวม + ลิงก์ ----
+    function findHistoryItemByNumber(num) {
+        const t = String(num || '');
+        if (!t) return null;
+        return (currentHistory || []).find(function (it) {
+            return it.displayNumber === t || it.billNumber === t || it.quotationNumber === t;
+        }) || null;
+    }
+
+    function buildShareLinkText(docNumber, item, link, fallbackTotal) {
+        const n = String(docNumber || '');
+        const isQuotation = item ? item.type === 'quotation' : n.charAt(0) === 'Q';
+        const typeText = item
+            ? (item.currentType || (isQuotation ? 'ใบเสนอราคา' : 'บิลเงินสด'))
+            : (isQuotation ? 'ใบเสนอราคา' : 'บิลเงินสด');
+        const lines = [typeText + (n ? ' เลขที่ ' + n : '')];
+        lines.push('อิน แอนด์ ออน เทเลอร์');
+        if (item && item.customerName) lines.push('ลูกค้า: ' + item.customerName);
+        if (item && item.date) {
+            // ประวัติส่งวันที่ dd/mm/yyyy (ค.ศ.) → แปลงปีเป็น พ.ศ. ให้ข้อความอ่านเป็นทางการ
+            const m = String(item.date).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            lines.push('วันที่ ' + (m ? m[1] + '/' + m[2] + '/' + (parseInt(m[3], 10) + 543) : item.date));
+        }
+        const total = (item && typeof item.grandTotal === 'number' && !isNaN(item.grandTotal))
+            ? item.grandTotal : fallbackTotal;
+        if (typeof total === 'number' && !isNaN(total)) lines.push('ยอดรวม ' + formatCurrency(total) + ' บาท');
+        lines.push('');
+        lines.push('📄 เปิดเอกสาร (PDF): ' + link);
+        return lines.join('\n');
+    }
+
+    // เปิดสิทธิ์ "ทุกคนที่มีลิงก์" (ครั้งเดียวต่อไฟล์) แล้ว share เป็นลิงก์พร้อมข้อความเอกสาร
+    async function shareLinkFlow(viewUrl, docNumber, fallbackTotal) {
         const fileId = extractFileId(viewUrl);
         if (!fileId) { showAlert('ไม่พบไฟล์ PDF', 'warning'); return; }
         showLoading('กำลังเปิดสิทธิ์ลิงก์...');
@@ -4921,14 +4953,21 @@
                 return;
             }
             const link = res.url;
+            const item = findHistoryItemByNumber(docNumber);
+            const shareText = buildShareLinkText(docNumber, item, link, fallbackTotal);
             if (navigator.share) {
-                navigator.share({ title: 'เอกสาร' + (docNumber ? ' ' + docNumber : ''), url: link })
+                // ใส่ลิงก์ทั้งใน text และ url — บางแอปปลายทางแสดงเฉพาะ text
+                navigator.share({
+                    title: 'เอกสาร' + (docNumber ? ' ' + docNumber : ''),
+                    text: shareText,
+                    url: link
+                })
                     .catch(function (e) {
                         if (e && e.name === 'AbortError') return;
-                        copyLink(link);
+                        copyLink(shareText);
                     });
             } else {
-                copyLink(link);
+                copyLink(shareText);
             }
         } catch (e) {
             hideLoading();
@@ -4936,13 +4975,13 @@
         }
     }
 
-    function copyLink(link) {
+    function copyLink(linkOrText) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(link).then(
-                function () { showAlert('คัดลอกลิงก์แล้ว', 'success'); },
-                function () { showAlert('ลิงก์: ' + link, 'info'); });
+            navigator.clipboard.writeText(linkOrText).then(
+                function () { showAlert('คัดลอกข้อความ + ลิงก์แล้ว', 'success'); },
+                function () { showAlert(linkOrText, 'info'); });
         } else {
-            showAlert('ลิงก์: ' + link, 'info');
+            showAlert(linkOrText, 'info');
         }
     }
 
