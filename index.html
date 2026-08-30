@@ -1745,6 +1745,57 @@
         font-weight: 500;
     }
 
+    /* Boot Screen (In and On OS) — macOS-like */
+    .boot-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 100000; /* สูงกว่า .lock-screen (99999) */
+        background: var(--background);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .boot-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        width: min(240px, 68vw);
+    }
+    .boot-logo {
+        width: 76px;
+        height: 76px;
+        object-fit: contain;
+        border-radius: 18px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.10);
+    }
+    .boot-title {
+        font-family: 'Outfit', 'Mitr', sans-serif;
+        font-weight: 800;
+        font-size: 21px;
+        letter-spacing: 0.05em;
+        color: var(--foreground);
+    }
+    .boot-bar {
+        width: 100%;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--muted);
+        overflow: hidden;
+    }
+    .boot-bar-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #8B5CF6, #6D28D9);
+        transition: width 0.6s ease;
+    }
+    .boot-status {
+        font-size: 13px;
+        color: var(--muted-foreground);
+        min-height: 18px;
+    }
+
     .lock-pad {
         display: grid;
         grid-template-columns: repeat(3, 72px);
@@ -1980,6 +2031,16 @@
     </style>
 </head>
 <body>
+
+    <!-- Boot Screen (In and On OS) — แสดงจนระบบพร้อม แล้วค่อยเข้าหน้ารหัส -->
+    <div id="bootScreen" class="boot-screen">
+        <div class="boot-inner">
+            <img src="" alt="In and On" class="boot-logo" id="bootLogo" style="display:none;">
+            <div class="boot-title">In and On OS</div>
+            <div class="boot-bar"><div class="boot-bar-fill" id="bootBar"></div></div>
+            <div class="boot-status" id="bootStatus">กำลังเริ่มระบบ…</div>
+        </div>
+    </div>
 
     <!-- PIN Lock Screen (iOS style) -->
     <div id="lockScreen" class="lock-screen">
@@ -2685,7 +2746,15 @@
         }
     };
     window.__applyConfig = function (cfg) {
-        try { if (cfg && cfg.logoUrl) { const l = document.getElementById('brandLogo'); if (l) l.src = cfg.logoUrl; } } catch (e) {}
+        try {
+            if (cfg && cfg.logoUrl) {
+                const l = document.getElementById('brandLogo');
+                if (l) l.src = cfg.logoUrl;
+                const bl = document.getElementById('bootLogo');
+                if (bl) { bl.src = cfg.logoUrl; bl.style.display = 'block'; }
+                try { localStorage.setItem('inandon_logo', cfg.logoUrl); } catch (e2) {}
+            }
+        } catch (e) {}
     };
     // iOS app-like: ล็อกซูม (pinch / double-tap)
     document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
@@ -2724,10 +2793,14 @@
             // Apply saved dark/light theme
             applySavedTheme();
 
-            // โชว์หน้า lock + keypad ทันที (ไม่รอ API — กันจอดำ/ว่างตอน GAS โหลดช้า/เย็น)
-            showLockIfLocked();
+            // Boot screen (In and On OS) — เข้าหน้ารหัสหลัง hash พร้อมเท่านั้น
+            bootStart();
+            // session ปลดล็อกอยู่แล้ว → boot แวบเดียวแล้วเข้าแอปเลย
+            try { if (sessionStorage.getItem('inandon_unlocked') === '1') bootHide(); } catch (e) {}
+            // failsafe: อะไรก็ตามพัง/เน็ตตาย หลุดจาก boot ได้เสมอ (lock จะขึ้นสถานะ + ลองดึง hash ต่อ)
+            setTimeout(() => { bootHide(); }, 12000);
 
-            // โหลดค่าลายเซ็นร้าน + PIN hash (hash มาทีหลัง — พิมพ์ PIN ระหว่างรอได้ ระบบแจ้งสถานะ)
+            // โหลดค่าลายเซ็นร้าน + PIN hash (hash มาถึง = boot จบ)
             loadPublicConfig();
             initPasscode();
 
@@ -2749,6 +2822,7 @@
             console.log('✅ App initialized successfully');
         } catch (error) {
             console.error('❌ Error initializing app:', error);
+            bootHide(); // อย่าให้ boot ค้างทับ error
             showError('เกิดข้อผิดพลาดในการโหลดระบบ กรุณารีเฟรชหน้าเว็บ');
         }
     }
@@ -2759,6 +2833,51 @@
             overlay.classList.add('hidden');
             setTimeout(() => overlay.style.display = 'none', 300);
         }
+    }
+
+    // ====================================================================
+    // Boot Screen (In and On OS) — โชว์จนระบบพร้อม (hash มาถึง) ค่อยเข้าหน้ารหัส
+    // ====================================================================
+
+    let bootDone = false;
+
+    function bootStart() {
+        const bar = document.getElementById('bootBar');
+        // โลโก้จาก cache (เปิดครั้งถัดไปเห็นโลโก้ทันที ไม่ต้องรอ config)
+        try {
+            const saved = localStorage.getItem('inandon_logo');
+            const bl = document.getElementById('bootLogo');
+            if (saved && bl) { bl.src = saved; bl.style.display = 'block'; }
+        } catch (e) { /* ignore */ }
+        if (bar) {
+            setTimeout(() => { bar.style.width = '35%'; }, 100);
+            setTimeout(() => { bar.style.width = '70%'; }, 900);
+            setTimeout(() => { if (!bootDone) bar.style.width = '90%'; }, 2200);
+        }
+        // แจ้งสถานะเมื่อรอนานผิดปกติ
+        setTimeout(() => {
+            if (!bootDone) {
+                const st = document.getElementById('bootStatus');
+                if (st) st.textContent = 'กำลังเชื่อมต่อเซิร์ฟเวอร์…';
+            }
+        }, 3500);
+    }
+
+    function bootHide() {
+        if (bootDone) return;
+        bootDone = true;
+        const bar = document.getElementById('bootBar');
+        if (bar) bar.style.width = '100%';
+        setTimeout(() => {
+            const screen = document.getElementById('bootScreen');
+            if (screen) {
+                screen.style.opacity = '0';
+                screen.style.transition = 'opacity 0.35s ease';
+                setTimeout(() => { screen.style.display = 'none'; }, 350);
+            }
+            // หลัง boot เสร็จค่อยโชว์หน้ารหัส (หรือเข้าแอปเลยถ้า session ปลดล็อกแล้ว)
+            showLockIfLocked();
+        }, 250);
     }
 
     // วันที่ท้องถิ่นแบบ yyyy-mm-dd (toISOString เป็น UTC — ก่อน 07:00 ของไทยจะได้เมื่อวาน) (BUG-7)
@@ -4415,6 +4534,7 @@
                 const s = document.getElementById('lockError');
                 if (s && s.textContent === 'กำลังโหลดระบบ…') { s.textContent = ''; s.classList.remove('lock-status'); }
                 if (passcodeHash) showLockIfLocked();
+                bootHide(); // hash พร้อม = ระบบพร้อม ปิด boot เข้าหน้ารหัส
             })
             .withFailureHandler(() => { notifyReady(); })
             .getPublicConfig();
